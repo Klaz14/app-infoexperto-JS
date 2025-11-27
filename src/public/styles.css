@@ -1,0 +1,271 @@
+:root {
+  --bg-color: #000000;
+  --text-color: #0d47a1;
+  --accent-color: #1976d2;
+  --error-color: #ff5252;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, sans-serif;
+}
+
+.app-container {
+  max-width: 600px;
+  margin: 40px auto;
+  padding: 24px;
+  border-radius: 16px;
+  border: 1px solid #1a237e;
+  background: radial-gradient(circle at top, #0a0a1a 0, #000 60%);
+  box-shadow: 0 0 20px rgba(13, 71, 161, 0.4);
+}
+
+h1 {
+  margin-top: 0;
+  text-align: center;
+}
+
+.subtitle {
+  text-align: center;
+  font-size: 0.9rem;
+  opacity: 0.8;
+  margin-bottom: 24px;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+label {
+  font-size: 0.9rem;
+}
+
+input,
+select {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #1a237e;
+  background-color: #02020a;
+  color: var(--text-color);
+  outline: none;
+}
+
+input::placeholder {
+  color: rgba(25, 118, 210, 0.6);
+}
+
+input:focus,
+select:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 1px var(--accent-color);
+}
+
+button {
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  background: linear-gradient(90deg, #0d47a1, #1976d2);
+  color: #e3f2fd;
+  transition: transform 0.1s ease, box-shadow 0.1s ease, opacity 0.1s ease;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+  box-shadow: none;
+}
+
+button:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.6);
+}
+
+.estado {
+  min-height: 20px;
+  font-size: 0.9rem;
+  margin-bottom: 12px;
+}
+
+.estado.error {
+  color: var(--error-color);
+}
+
+.resultado {
+  margin-top: 20px;
+  border-top: 1px solid #1a237e;
+  padding-top: 16px;
+}
+
+.resultado h2 {
+  margin-top: 0;
+}
+
+/* Nombre de la persona */
+.resultado-nombre {
+  margin: 0 0 12px 0;
+  text-align: left;
+  font-size: 1.1rem;
+  color: var(--text-color);
+  font-weight: 600;
+}
+
+/* Badges de riesgo */
+.riesgos-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.riesgo-badge {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  opacity: 0.35;
+}
+
+.riesgo-badge[data-riesgo="ALTO"] {
+  color: #ff5252;
+}
+
+.riesgo-badge[data-riesgo="MEDIO"] {
+  color: #ffeb3b;
+}
+
+.riesgo-badge[data-riesgo="BAJO"] {
+  color: #4caf50;
+}
+
+.riesgo-badge.activo {
+  opacity: 1;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+/* Detalle de motivos para riesgo medio */
+.riesgo-detalle {
+  margin-top: 8px;
+}
+
+.riesgo-detalle h3 {
+  margin: 4px 0 4px 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #90caf9;
+}
+
+.riesgo-detalle ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.85rem;
+}
+
+.riesgo-detalle li {
+  margin-bottom: 2px;
+}
+
+/* Utilidad general */
+pre {
+  background-color: #02020a;
+  border-radius: 8px;
+  padding: 12px;
+  max-height: 260px;
+  overflow-y: auto;
+  font-size: 0.85rem;
+}
+
+.oculto {
+  display: none;
+}
+
+.top-bar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 0.8rem;
+}
+
+.user-email {
+  opacity: 0.8;
+}
+
+.logout-btn {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: none;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: linear-gradient(90deg, #b71c1c, #e53935);
+  color: #ffebee;
+  transition: transform 0.1s ease, box-shadow 0.1s ease, opacity 0.1s ease;
+}
+
+.logout-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+  box-shadow: none;
+}
+
+.logout-btn:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(229, 57, 53, 0.6);
+}
+
+/* Wrapper para input de contraseña + botón ojo */
+.password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* Input ocupa todo el ancho, el botón se superpone al borde derecho */
+.password-wrapper input {
+  width: 100%;
+  padding-right: 40px; /* espacio para el botón ojo */
+}
+
+/* Botón ojo */
+.toggle-password-btn {
+  position: absolute;
+  right: 10px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: #90caf9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toggle-password-btn:hover {
+  transform: translateY(0); /* para que no herede el hover de los otros botones */
+  box-shadow: none;
+  opacity: 0.9;
+}

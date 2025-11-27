@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Consulta Infoexperto</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="stylesheet" href="./styles.css" />
+
+        <!-- jsPDF para generar PDF -->
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
+      integrity="sha512-3c6Z7pJ5Okc6yV/v5KjpQ0u0EgP3GbVgZfhq0L+5gYc8ehmHjxWbGNobYkGDC40h9Dr9j0h4hR5FZy9q3c7aug=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+      defer
+    ></script>
+
+    <!-- Antes: <script src="./main.js" defer></script> -->
+    <script type="module" src="./main.js"></script>
+
+  </head>
+  <body>
+    <div class="app-container">
+    <!-- Bloque nuevo: barra de usuario / logout -->
+    <div class="top-bar">
+      <span id="user-email" class="user-email"></span>
+      <button id="logout-btn" class="logout-btn">Cerrar sesión</button>
+    </div>
+
+    <h1>Consulta Infoexperto</h1>
+    <p class="subtitle">
+      Ingresá el DNI o CUIT/CUIL para obtener la información comercial.
+    </p>
+    <div class="app-container">
+      <h1>Consulta Infoexperto</h1>
+      <p class="subtitle">
+        Ingresá el DNI o CUIT/CUIL para obtener la información comercial.
+      </p>
+
+      <form id="consulta-form">
+        <div class="field-group">
+          <label for="tipoDocumento">Tipo de documento</label>
+          <select id="tipoDocumento" name="tipoDocumento" required>
+            <option value="dni">DNI</option>
+            <option value="cuit">CUIT / CUIL</option>
+          </select>
+        </div>
+
+        <div class="field-group">
+          <label for="numeroDocumento">Número</label>
+          <input
+            type="text"
+            id="numeroDocumento"
+            name="numeroDocumento"
+            placeholder="Ej: 30123456 o 20-12345678-3"
+            required
+          />
+        </div>
+
+        <button type="submit" id="buscar-btn">Buscar</button>
+      </form>
+
+      <div id="estado" class="estado"></div>
+
+      <section id="resultado" class="resultado oculto">
+        <h2 id="resultado-nombre" class="resultado-nombre"></h2>
+
+        <div class="riesgos-container">
+          <span class="riesgo-badge" data-riesgo="ALTO">RIESGO ALTO</span>
+          <span class="riesgo-badge" data-riesgo="MEDIO">RIESGO MEDIO</span>
+          <span class="riesgo-badge" data-riesgo="BAJO">RIESGO BAJO</span>
+        </div>
+
+        <!-- Detalle de motivos para riesgo medio -->
+        <div id="riesgo-detalle" class="riesgo-detalle oculto">
+          <h3>Motivos de la evaluación</h3>
+          <ul id="riesgo-motivos"></ul>
+        </div>
+
+        <button id="descargar-pdf-btn" disabled>
+          Descargar PDF
+        </button>
+      </section>
+    </div>
+  </body>
+</html>

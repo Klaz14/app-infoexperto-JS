@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Login Infoexperto</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="stylesheet" href="./styles.css" />
+
+    <script type="module" src="./login.js"></script>
+  </head>
+  <body>
+    <div class="app-container">
+      <h1>Acceso Infoexperto</h1>
+      <p class="subtitle">
+        Iniciá sesión con tu usuario y contraseña para usar la consulta.
+      </p>
+
+      <form id="login-form">
+        <div class="field-group">
+          <label for="email">Email</label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            autocomplete="email"
+            required
+          />
+        </div>
+
+        <div class="field-group">
+            <label for="password">Contraseña</label>
+
+            <div class="password-wrapper">
+                <input
+                type="password"
+                id="password"
+                name="password"
+                placeholder="Ingresá tu contraseña"
+                required
+                autocomplete="current-password"
+                />
+
+                <button
+                type="button"
+                id="toggle-password"
+                class="toggle-password-btn"
+                aria-label="Mostrar u ocultar contraseña"
+                aria-pressed="false"
+                >
+                👁
+                </button>
+            </div>
+        </div>
+
+        <button type="submit" id="login-btn">Iniciar sesión</button>
+      </form>
+
+      <div id="login-estado" class="estado"></div>
+    </div>
+  </body>
+</html>
