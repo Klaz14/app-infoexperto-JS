@@ -1,0 +1,73 @@
+#####################
+# Node / npm / deps #
+#####################
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Si querés versionar el lockfile, borrá estas líneas
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+###################
+# Build / Dist    #
+###################
+dist/
+build/
+.tmp/
+.temp/
+
+###################
+# Env / Secrets   #
+###################
+.env
+.env.local
+.env.*.local
+
+# Credenciales Firebase Admin (service account) - NO SUBIR JAMÁS
+app-infoexperto-firebase-ad.json
+*firebase-adminsdk*.json
+*serviceAccount*.json
+
+# Otros posibles secretos JSON
+*.credentials.json
+
+###################
+# Logs            #
+###################
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+###################
+# Sistema / IDE   #
+###################
+# Windows / Mac
+Thumbs.db
+.DS_Store
+
+# VSCode
+.vscode/
+.history/
+
+# Otros editores / IDEs
+.idea/
+*.swp
+*.swo
+
+###################
+# Tests / Coverage#
+###################
+coverage/
+.nyc_output/
+
+###################
+# Misc            #
+###################
+*.tmp
+*.temp
