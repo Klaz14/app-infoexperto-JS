@@ -310,380 +310,413 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-    // PDF (ahora más completo y cercano al layout de InfoExperto)
-  if (btnPdf) {
-    btnPdf.addEventListener("click", () => {
-      if (!ultimoResultado) return;
+  // Helper para escribir texto largo sin que se solape:
+  // - hace wrap de líneas
+  // - maneja salto de página si se pasa de yLimit
+  function escribirBloque(doc, texto, x, y, options = {}) {
+    const {
+      maxWidth = 180,   // ancho útil
+      lineHeight = 4,   // alto de cada línea
+      yLimit = 270,     // límite inferior antes de cambiar de página
+    } = options;
 
-      const globalJsPdf = window.jspdf;
-      if (!globalJsPdf || !globalJsPdf.jsPDF) {
-        console.error("jsPDF no está disponible:", globalJsPdf);
-        alert(
-          "Hubo un problema cargando el generador de PDF (jsPDF). Recargá la página e intentá de nuevo."
-        );
-        return;
+    if (!texto) return y;
+
+    // Convertimos a string por si viene null/number
+    const textoStr = String(texto);
+
+    // Partimos el texto en varias líneas para que no se corte a lo ancho
+    const lineas = doc.splitTextToSize(textoStr, maxWidth);
+
+    lineas.forEach((linea) => {
+      // Si no hay espacio suficiente en la página, pasamos a la siguiente
+      if (y > yLimit) {
+        doc.addPage();
+        y = 20; // margen superior para la nueva página
       }
+      doc.text(linea, x, y);
+      y += lineHeight;
+    });
 
-      const { jsPDF } = globalJsPdf;
-      const doc = new jsPDF();
+    return y;
+  }
 
-      const {
-        nombreCompleto,
-        cuit,
-        numeroDocumento,
-        tipoDocumento,
-        riesgo,
-        scoringApi,
-        fechaInforme,
-        riesgoInterno,
-        informeOriginal,
-        numero,
-      } = ultimoResultado;
+    // PDF (ahora más completo y usando escribirBloque para evitar solapamientos)
+    if (btnPdf) {
+      btnPdf.addEventListener("click", () => {
+        if (!ultimoResultado) return;
 
-      const nombre =
-        nombreCompleto || informeOriginal?.identidad?.nombre_completo || "N/D";
-
-      const identificador =
-        tipoDocumento && tipoDocumento.toLowerCase() === "dni"
-          ? `DNI: ${numeroDocumento || numero || "N/D"}`
-          : `CUIT/CUIL: ${cuit || numero || "N/D"}`;
-
-      const fechaGenerado = new Date().toLocaleString("es-AR");
-
-      // Helpers para maquetar el PDF de forma más ordenada
-      let y = 52;
-      const MAX_Y = 280;
-      const LINE_H = 4;
-
-      function ensureSpace(extraLines = 1) {
-        if (y + extraLines * LINE_H > MAX_Y) {
-          doc.addPage();
-          y = 20;
-        }
-      }
-
-      function sectionTitle(rawKeyOrTitle) {
-        // Si viene un título “humano” lo usamos, si no, transformamos la key
-        const t = rawKeyOrTitle
-          .replace(/_/g, " ")
-          .replace(/([a-z])([A-Z])/g, "$1 $2")
-          .replace(/\s+/g, " ")
-          .trim();
-        return t.charAt(0).toUpperCase() + t.slice(1);
-      }
-
-      function printSectionHeader(title) {
-        ensureSpace(2);
-        doc.setFontSize(11);
-        doc.text(title, 10, y);
-        y += 5;
-        doc.setFontSize(9);
-      }
-
-      function printLine(text, indent = 0) {
-        if (!text) return;
-        ensureSpace(1);
-        doc.text(text, 10 + indent, y);
-        y += LINE_H;
-      }
-
-      // Imprime de forma genérica objetos/arrays para cubrir TODA la info
-      function printGenericBlockFromValue(value, indent = 0, labelPrefix = "") {
-        if (value == null) return;
-
-        if (Array.isArray(value)) {
-          if (value.length === 0) return;
-          value.slice(0, 20).forEach((item, idx) => {
-            if (typeof item === "object" && item !== null) {
-              printLine(
-                `${labelPrefix ? labelPrefix + " " : ""}#${idx + 1}:`,
-                indent
-              );
-              Object.entries(item).forEach(([k, v]) => {
-                if (
-                  v === null ||
-                  v === undefined ||
-                  v === "" ||
-                  (typeof v === "number" && Number.isNaN(v))
-                ) {
-                  return;
-                }
-                const text = `${sectionTitle(k)}: ${String(v)}`;
-                printLine(`- ${text}`, indent + 4);
-              });
-            } else {
-              printLine(
-                `${labelPrefix ? labelPrefix + ": " : ""}${String(item)}`,
-                indent
-              );
-            }
-          });
-        } else if (typeof value === "object") {
-          Object.entries(value).forEach(([k, v]) => {
-            if (
-              v === null ||
-              v === undefined ||
-              v === "" ||
-              (typeof v === "number" && Number.isNaN(v))
-            ) {
-              return;
-            }
-            if (typeof v === "object") {
-              printLine(`${sectionTitle(k)}:`, indent);
-              printGenericBlockFromValue(v, indent + 4);
-            } else {
-              printLine(`${sectionTitle(k)}: ${String(v)}`, indent);
-            }
-          });
-        } else {
-          printLine(
-            `${labelPrefix ? labelPrefix + ": " : ""}${String(value)}`,
-            indent
+        const globalJsPdf = window.jspdf;
+        if (!globalJsPdf || !globalJsPdf.jsPDF) {
+          console.error("jsPDF no está disponible:", globalJsPdf);
+          alert(
+            "Hubo un problema cargando el generador de PDF (jsPDF). Recargá la página e intentá de nuevo."
           );
+          return;
         }
-      }
 
-      // CABECERA (similar a InfoExperto)
-      doc.setFontSize(14);
-      doc.text("Informe comercial InfoExperto", 10, 15);
+        const { jsPDF } = globalJsPdf;
+        const doc = new jsPDF();
 
-      doc.setFontSize(10);
-      doc.text(`Generado por la app: ${fechaGenerado}`, 10, 22);
-      if (fechaInforme) {
-        doc.text(`Fecha informe InfoExperto: ${fechaInforme}`, 10, 27);
-      }
+        const {
+          nombreCompleto,
+          cuit,
+          numeroDocumento,
+          tipoDocumento,
+          riesgo,
+          scoringApi,
+          fechaInforme,
+          riesgoInterno,
+          informeOriginal,
+          numero,
+        } = ultimoResultado;
 
-      doc.text(`Nombre: ${nombre}`, 10, 34);
-      doc.text(identificador, 10, 39);
+        const nombre =
+          nombreCompleto || informeOriginal?.identidad?.nombre_completo || "N/D";
 
-      const riesgoApi = (riesgo || "").toString().toUpperCase();
-      let lineaRiesgo = `Riesgo general (API): ${riesgoApi}`;
-      if (scoringApi != null) {
-        lineaRiesgo += ` | Scoring InfoExperto: ${scoringApi}`;
-      }
-      if (riesgoInterno && riesgoInterno.estado) {
-        lineaRiesgo += ` | Evaluación interna: ${riesgoInterno.estado} (score: ${riesgoInterno.scoreInterno})`;
-      }
-      doc.text(lineaRiesgo, 10, 45);
+        const identificador =
+          tipoDocumento && tipoDocumento.toLowerCase() === "dni"
+            ? `DNI: ${numeroDocumento || numero || "N/D"}`
+            : `CUIT/CUIL: ${cuit || numero || "N/D"}`;
 
-      // ==========================
-      // BLOQUES “CLÁSICOS” (igual que antes)
-      // ==========================
+        const fechaGenerado = new Date().toLocaleString("es-AR");
 
-      // IDENTIDAD
-      if (informeOriginal && informeOriginal.identidad) {
-        const id = informeOriginal.identidad;
-        printSectionHeader("Identidad / Datos básicos");
+        // Helpers de maquetado
+        let y = 52;
+        const MAX_Y = 280;
+        const LINE_H = 4;
 
-        const lineasIdentidad = [
-          `Nombre completo: ${id.nombre_completo || "-"}`,
-          `CUIT: ${id.cuit || "-"}`,
-          `Documento: ${id.tipo_documento || "-"} ${
-            id.numero_documento || "-"
-          }`,
-          `Sexo: ${id.sexo || "-"}`,
-          `Localidad: ${id.localidad || "-"} (${id.provincia || "-"})`,
-          `Actividad AFIP: ${id.actividad || "-"}`,
-          `Años de inscripción: ${id.anios_inscripcion || "-"}`,
-        ];
-
-        lineasIdentidad.forEach((txt) => printLine(txt));
-        y += 2;
-      }
-
-      // SCORING INFOEXPERTO (cuadro propio parecido al PDF)
-      const scoringInf = informeOriginal?.scoringInforme;
-      if (scoringInf) {
-        printSectionHeader("Scoring InfoExperto");
-
-        const camposScoringPrincipales = [
-          ["Scoring", scoringInf.scoring],
-          ["Descripción", scoringInf.descripcion || scoringInf.leyenda],
-          ["Línea de crédito estimada", scoringInf.credito],
-          ["Deuda total estimada", scoringInf.deuda],
-        ];
-
-        camposScoringPrincipales.forEach(([label, val]) => {
-          if (val !== undefined && val !== null && val !== "") {
-            printLine(`${label}: ${String(val)}`);
+        function ensureSpace(extraLines = 1) {
+          // Sólo se usa para títulos u otros textos cortos.
+          if (y + extraLines * LINE_H > MAX_Y) {
+            doc.addPage();
+            y = 20;
           }
-        });
+        }
 
-        // Si hay más campos en scoringInforme los volcamos genéricamente
-        const { scoring, descripcion, leyenda, credito, deuda, ...resto } =
-          scoringInf;
-        printGenericBlockFromValue(resto, 4);
-        y += 2;
-      }
+        function sectionTitle(rawKeyOrTitle) {
+          const t = rawKeyOrTitle
+            .replace(/_/g, " ")
+            .replace(/([a-z])([A-Z])/g, "$1 $2")
+            .replace(/\s+/g, " ")
+            .trim();
+          return t.charAt(0).toUpperCase() + t.slice(1);
+        }
 
-      // CONDICIÓN TRIBUTARIA
-      if (informeOriginal && informeOriginal.condicionTributaria) {
-        const c = informeOriginal.condicionTributaria;
-        printSectionHeader("Condición tributaria (AFIP)");
+        function printSectionHeader(title) {
+          ensureSpace(2);
+          doc.setFontSize(11);
+          // Títulos son cortos, no hace falta wrap especial
+          doc.text(title, 10, y);
+          y += 5;
+          doc.setFontSize(9);
+        }
 
-        const lineasTrib = [
-          `Fecha: ${c.fecha || "-"}`,
-          `Impuesto Ganancias: ${c.impuestos_ganancias || "-"}`,
-          `Impuesto IVA: ${c.impuestos_iva || "-"}`,
-          `Categoría monotributo: ${
-            c.categoria_monotributo || c.categoria || "-"
-          }`,
-          `Actividad: ${c.actividad || "-"}`,
-          `Monto anual declarado: ${
-            typeof c.monto_anual === "number"
-              ? formatMoney(c.monto_anual)
-              : "-"
-          }`,
-        ];
-        lineasTrib.forEach((txt) => printLine(txt));
-        y += 2;
-      }
+        // AHORA TODAS LAS LÍNEAS LARGAS PASAN POR escribirBloque
+        function printLine(text, indent = 0) {
+          if (!text) return;
+          const x = 10 + indent;
+          const maxWidth = 190 - x; // margen derecho
+          y = escribirBloque(doc, text, x, y, {
+            maxWidth,
+            lineHeight: LINE_H,
+            yLimit: MAX_Y,
+          });
+        }
 
-      // BCRA
-      const bcra = informeOriginal?.bcra;
-      if (bcra && (bcra.resumen_historico || bcra.datos)) {
-        printSectionHeader("Resumen BCRA últimos períodos");
+        // Imprime de forma genérica objetos/arrays para cubrir TODA la info
+        function printGenericBlockFromValue(value, indent = 0, labelPrefix = "") {
+          if (value == null) return;
 
-        const resumen = bcra.resumen_historico || {};
-        const clavesOrdenadas = Object.keys(resumen).sort();
-        clavesOrdenadas.forEach((k) => {
-          const r = resumen[k];
-          const linea = `${r.periodo}: peor situación ${
-            r.peor_situacion
-          }, deuda total ${r.deuda_total}, entidades: ${
-            r.cantidad_entidades
-          }`;
-          printLine(linea);
-        });
-        y += 2;
-
-        if (bcra.datos && bcra.datos.length > 0) {
-          printLine("Principales entidades y deudas:");
-          bcra.datos.slice(0, 5).forEach((ent) => {
-            const nombreEnt = ent.nombre || "Entidad";
-            printLine(`- ${nombreEnt}`, 4);
-            (ent.deudas || []).slice(0, 4).forEach((d) => {
-              const linea = `${d.periodo}: situación ${d.situacion}, monto ${d.monto}`;
-              printLine(linea, 8);
+          if (Array.isArray(value)) {
+            if (value.length === 0) return;
+            value.slice(0, 20).forEach((item, idx) => {
+              if (typeof item === "object" && item !== null) {
+                printLine(
+                  `${labelPrefix ? labelPrefix + " " : ""}#${idx + 1}:`,
+                  indent
+                );
+                Object.entries(item).forEach(([k, v]) => {
+                  if (
+                    v === null ||
+                    v === undefined ||
+                    v === "" ||
+                    (typeof v === "number" && Number.isNaN(v))
+                  ) {
+                    return;
+                  }
+                  const text = `${sectionTitle(k)}: ${String(v)}`;
+                  printLine(`- ${text}`, indent + 4);
+                });
+              } else {
+                printLine(
+                  `${labelPrefix ? labelPrefix + ": " : ""}${String(item)}`,
+                  indent
+                );
+              }
             });
+          } else if (typeof value === "object") {
+            Object.entries(value).forEach(([k, v]) => {
+              if (
+                v === null ||
+                v === undefined ||
+                v === "" ||
+                (typeof v === "number" && Number.isNaN(v))
+              ) {
+                return;
+              }
+              if (typeof v === "object") {
+                printLine(`${sectionTitle(k)}:`, indent);
+                printGenericBlockFromValue(v, indent + 4);
+              } else {
+                printLine(`${sectionTitle(k)}: ${String(v)}`, indent);
+              }
+            });
+          } else {
+            printLine(
+              `${labelPrefix ? labelPrefix + ": " : ""}${String(value)}`,
+              indent
+            );
+          }
+        }
+
+        // CABECERA (similar a InfoExperto)
+        doc.setFontSize(14);
+        doc.text("Informe comercial InfoExperto", 10, 15);
+
+        doc.setFontSize(10);
+        doc.text(`Generado por la app: ${fechaGenerado}`, 10, 22);
+        if (fechaInforme) {
+          doc.text(`Fecha informe InfoExperto: ${fechaInforme}`, 10, 27);
+        }
+
+        doc.text(`Nombre: ${nombre}`, 10, 34);
+        doc.text(identificador, 10, 39);
+
+        const riesgoApi = (riesgo || "").toString().toUpperCase();
+        let lineaRiesgo = `Riesgo general (API): ${riesgoApi}`;
+        if (scoringApi != null) {
+          lineaRiesgo += ` | Scoring InfoExperto: ${scoringApi}`;
+        }
+        if (riesgoInterno && riesgoInterno.estado) {
+          lineaRiesgo += ` | Evaluación interna: ${riesgoInterno.estado} (score: ${riesgoInterno.scoreInterno})`;
+        }
+        doc.text(lineaRiesgo, 10, 45);
+
+        // ==========================
+        // BLOQUES “CLÁSICOS”
+        // ==========================
+
+        // IDENTIDAD
+        if (informeOriginal && informeOriginal.identidad) {
+          const id = informeOriginal.identidad;
+          printSectionHeader("Identidad / Datos básicos");
+
+          const lineasIdentidad = [
+            `Nombre completo: ${id.nombre_completo || "-"}`,
+            `CUIT: ${id.cuit || "-"}`,
+            `Documento: ${id.tipo_documento || "-"} ${
+              id.numero_documento || "-"
+            }`,
+            `Sexo: ${id.sexo || "-"}`,
+            `Localidad: ${id.localidad || "-"} (${id.provincia || "-"})`,
+            `Actividad AFIP: ${id.actividad || "-"}`,
+            `Años de inscripción: ${id.anios_inscripcion || "-"}`,
+          ];
+
+          lineasIdentidad.forEach((txt) => printLine(txt));
+          y += 2;
+        }
+
+        // SCORING INFOEXPERTO
+        const scoringInf = informeOriginal?.scoringInforme;
+        if (scoringInf) {
+          printSectionHeader("Scoring InfoExperto");
+
+          const camposScoringPrincipales = [
+            ["Scoring", scoringInf.scoring],
+            ["Descripción", scoringInf.descripcion || scoringInf.leyenda],
+            ["Línea de crédito estimada", scoringInf.credito],
+            ["Deuda total estimada", scoringInf.deuda],
+          ];
+
+          camposScoringPrincipales.forEach(([label, val]) => {
+            if (val !== undefined && val !== null && val !== "") {
+              printLine(`${label}: ${String(val)}`);
+            }
+          });
+
+          const { scoring, descripcion, leyenda, credito, deuda, ...resto } =
+            scoringInf;
+          printGenericBlockFromValue(resto, 4);
+          y += 2;
+        }
+
+        // CONDICIÓN TRIBUTARIA
+        if (informeOriginal && informeOriginal.condicionTributaria) {
+          const c = informeOriginal.condicionTributaria;
+          printSectionHeader("Condición tributaria (AFIP)");
+
+          const lineasTrib = [
+            `Fecha: ${c.fecha || "-"}`,
+            `Impuesto Ganancias: ${c.impuestos_ganancias || "-"}`,
+            `Impuesto IVA: ${c.impuestos_iva || "-"}`,
+            `Categoría monotributo: ${
+              c.categoria_monotributo || c.categoria || "-"
+            }`,
+            `Actividad: ${c.actividad || "-"}`,
+            `Monto anual declarado: ${
+              typeof c.monto_anual === "number"
+                ? formatMoney(c.monto_anual)
+                : "-"
+            }`,
+          ];
+          lineasTrib.forEach((txt) => printLine(txt));
+          y += 2;
+        }
+
+        // BCRA
+        const bcra = informeOriginal?.bcra;
+        if (bcra && (bcra.resumen_historico || bcra.datos)) {
+          printSectionHeader("Resumen BCRA últimos períodos");
+
+          const resumen = bcra.resumen_historico || {};
+          const clavesOrdenadas = Object.keys(resumen).sort();
+          clavesOrdenadas.forEach((k) => {
+            const r = resumen[k];
+            const linea = `${r.periodo}: peor situación ${
+              r.peor_situacion
+            }, deuda total ${r.deuda_total}, entidades: ${
+              r.cantidad_entidades
+            }`;
+            printLine(linea);
+          });
+          y += 2;
+
+          if (bcra.datos && bcra.datos.length > 0) {
+            printLine("Principales entidades y deudas:");
+            bcra.datos.slice(0, 5).forEach((ent) => {
+              const nombreEnt = ent.nombre || "Entidad";
+              printLine(`- ${nombreEnt}`, 4);
+              (ent.deudas || []).slice(0, 4).forEach((d) => {
+                const linea = `${d.periodo}: situación ${d.situacion}, monto ${d.monto}`;
+                printLine(linea, 8);
+              });
+            });
+            y += 2;
+          }
+        }
+
+        // RODADOS
+        const rodados = informeOriginal?.rodados;
+        if (Array.isArray(rodados) && rodados.length > 0) {
+          printSectionHeader("Rodados registrados");
+          rodados.slice(0, 10).forEach((r) => {
+            const linea = `${r.dominio || "-"} – ${r.marca || ""} ${
+              r.version || ""
+            } (${r.modelo || "-"}) ${r.porcentaje || ""}% – Fecha: ${
+              r.fecha_transaccion || "-"
+            }`;
+            printLine(linea);
           });
           y += 2;
         }
-      }
 
-      // RODADOS
-      const rodados = informeOriginal?.rodados;
-      if (Array.isArray(rodados) && rodados.length > 0) {
-        printSectionHeader("Rodados registrados");
-        rodados.slice(0, 10).forEach((r) => {
-          const linea = `${r.dominio || "-"} – ${r.marca || ""} ${
-            r.version || ""
-          } (${r.modelo || "-"}) ${r.porcentaje || ""}% – Fecha: ${
-            r.fecha_transaccion || "-"
-          }`;
-          printLine(linea);
+        // INMUEBLES
+        const inmuebles = informeOriginal?.inmuebles;
+        if (Array.isArray(inmuebles) && inmuebles.length > 0) {
+          printSectionHeader("Inmuebles / catastros");
+          inmuebles.slice(0, 10).forEach((i) => {
+            const linea1 = `${i.direccion || "-"} (${i.provincia || "-"}) – CP ${
+              i.cp || "-"
+            }`;
+            const linea2 = `Catastro: ${i.numero_catastro || "-"}, m2: ${
+              i.metros_cuadrados || "-"
+            }, alta: ${i.fecha_alta || "-"}`;
+            printLine(linea1);
+            printLine(linea2, 4);
+          });
+          y += 2;
+        }
+
+        // NIVEL SOCIOECONÓMICO
+        const nse = informeOriginal?.nivelSocioeconomico;
+        if (nse && nse.nse_personal) {
+          printSectionHeader("Nivel socioeconómico estimado");
+          const codigo = nse.nse_personal;
+          const detalle =
+            (nse.nse_detalle && nse.nse_detalle[codigo]) || "Sin detalle.";
+          printLine(`Categoría personal: ${codigo}`);
+          printLine(detalle, 4);
+          y += 2;
+        }
+
+        // CONTACTO
+        const mails = informeOriginal?.mails;
+        const telDeclarados = informeOriginal?.telefonosDeclaradosValidados;
+        const celulares = informeOriginal?.celulares;
+
+        if (
+          (Array.isArray(mails) && mails.length > 0) ||
+          (Array.isArray(telDeclarados) && telDeclarados.length > 0) ||
+          (Array.isArray(celulares) && celulares.length > 0)
+        ) {
+          printSectionHeader("Datos de contacto");
+
+          if (Array.isArray(mails) && mails.length > 0) {
+            printLine("Emails:");
+            mails.slice(0, 10).forEach((m) => {
+              printLine(`- ${m.mail || m.direccion || "-"}`, 4);
+            });
+          }
+
+          if (Array.isArray(telDeclarados) && telDeclarados.length > 0) {
+            printLine("Teléfonos declarados:");
+            telDeclarados.slice(0, 10).forEach((t) => {
+              const linea = `${t.telefono} (WhatsApp: ${t.whatsapp}, ENACOM: ${t.enacom})`;
+              printLine(`- ${linea}`, 4);
+            });
+          }
+
+          if (Array.isArray(celulares) && celulares.length > 0) {
+            printLine("Celulares (otras fuentes):");
+            celulares.slice(0, 10).forEach((c) => {
+              printLine(`- ${c.numero || ""}`, 4);
+            });
+          }
+          y += 2;
+        }
+
+        // SECCIONES ADICIONALES GENÉRICAS
+        const handledKeys = new Set([
+          "identidad",
+          "scoringInforme",
+          "condicionTributaria",
+          "bcra",
+          "rodados",
+          "inmuebles",
+          "nivelSocioeconomico",
+          "mails",
+          "telefonosDeclaradosValidados",
+          "celulares",
+        ]);
+
+        const otrosKeys = Object.keys(informeOriginal || {}).filter(
+          (k) => !handledKeys.has(k)
+        );
+
+        otrosKeys.forEach((k) => {
+          const val = informeOriginal[k];
+          if (val == null) return;
+          printSectionHeader(sectionTitle(k));
+          printGenericBlockFromValue(val, 0);
+          y += 2;
         });
-        y += 2;
-      }
 
-      // INMUEBLES
-      const inmuebles = informeOriginal?.inmuebles;
-      if (Array.isArray(inmuebles) && inmuebles.length > 0) {
-        printSectionHeader("Inmuebles / catastros");
-        inmuebles.slice(0, 10).forEach((i) => {
-          const linea1 = `${i.direccion || "-"} (${i.provincia || "-"}) – CP ${
-            i.cp || "-"
-          }`;
-          const linea2 = `Catastro: ${i.numero_catastro || "-"}, m2: ${
-            i.metros_cuadrados || "-"
-          }, alta: ${i.fecha_alta || "-"}`;
-          printLine(linea1);
-          printLine(linea2, 4);
-        });
-        y += 2;
-      }
-
-      // NIVEL SOCIOECONÓMICO
-      const nse = informeOriginal?.nivelSocioeconomico;
-      if (nse && nse.nse_personal) {
-        printSectionHeader("Nivel socioeconómico estimado");
-        const codigo = nse.nse_personal;
-        const detalle =
-          (nse.nse_detalle && nse.nse_detalle[codigo]) || "Sin detalle.";
-        printLine(`Categoría personal: ${codigo}`);
-        printLine(detalle, 4);
-        y += 2;
-      }
-
-      // CONTACTO
-      const mails = informeOriginal?.mails;
-      const telDeclarados = informeOriginal?.telefonosDeclaradosValidados;
-      const celulares = informeOriginal?.celulares;
-
-      if (
-        (Array.isArray(mails) && mails.length > 0) ||
-        (Array.isArray(telDeclarados) && telDeclarados.length > 0) ||
-        (Array.isArray(celulares) && celulares.length > 0)
-      ) {
-        printSectionHeader("Datos de contacto");
-
-        if (Array.isArray(mails) && mails.length > 0) {
-          printLine("Emails:");
-          mails.slice(0, 10).forEach((m) => {
-            printLine(`- ${m.mail || m.direccion || "-"}`, 4);
-          });
-        }
-
-        if (Array.isArray(telDeclarados) && telDeclarados.length > 0) {
-          printLine("Teléfonos declarados:");
-          telDeclarados.slice(0, 10).forEach((t) => {
-            const linea = `${t.telefono} (WhatsApp: ${t.whatsapp}, ENACOM: ${t.enacom})`;
-            printLine(`- ${linea}`, 4);
-          });
-        }
-
-        if (Array.isArray(celulares) && celulares.length > 0) {
-          printLine("Celulares (otras fuentes):");
-          celulares.slice(0, 10).forEach((c) => {
-            printLine(`- ${c.numero || ""}`, 4);
-          });
-        }
-        y += 2;
-      }
-
-      // ====================================
-      // SECCIONES ADICIONALES GENÉRICAS
-      // (para volcar TODO lo demás que traiga la API)
-      // ====================================
-      const handledKeys = new Set([
-        "identidad",
-        "scoringInforme",
-        "condicionTributaria",
-        "bcra",
-        "rodados",
-        "inmuebles",
-        "nivelSocioeconomico",
-        "mails",
-        "telefonosDeclaradosValidados",
-        "celulares",
-      ]);
-
-      const otrosKeys = Object.keys(informeOriginal || {}).filter(
-        (k) => !handledKeys.has(k)
-      );
-
-      otrosKeys.forEach((k) => {
-        const val = informeOriginal[k];
-        if (val == null) return;
-        printSectionHeader(sectionTitle(k));
-        printGenericBlockFromValue(val, 0);
-        y += 2;
+        const nombreArchivo = `informe-infoexperto-${
+          ultimoResultado.numero || numeroDocumento || "sin-numero"
+        }.pdf`;
+        doc.save(nombreArchivo);
       });
-
-      const nombreArchivo = `informe-infoexperto-${
-        ultimoResultado.numero || numeroDocumento || "sin-numero"
-      }.pdf`;
-      doc.save(nombreArchivo);
-    });
-  }
+    }
 });
