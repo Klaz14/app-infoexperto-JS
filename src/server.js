@@ -3,6 +3,8 @@ const express = require("express");
 const path = require("path");
 const cors = require("cors");
 const dotenv = require("dotenv");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 
 // Node 18+ tiene fetch / FormData global
 dotenv.config();
@@ -12,13 +14,102 @@ const PORT = process.env.PORT || 3000;
 
 const authMiddleware = require("./authMiddleware");
 
-// Middlewares
-app.use(cors());
+// --- Middlewares globales de seguridad ---
+// Configuramos CSP para permitir Firebase y jsPDF desde CDN
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+
+        // JS que se pueden cargar en el navegador
+        scriptSrc: [
+          "'self'",
+          "https://www.gstatic.com",     // Firebase CDN
+          "https://cdnjs.cloudflare.com" // jsPDF CDN
+        ],
+
+        // Desde dónde se pueden hacer conexiones XHR/fetch desde el navegador
+        connectSrc: [
+          "'self'",
+          "https://identitytoolkit.googleapis.com", // Firebase Auth
+          "https://securetoken.googleapis.com",     // Tokens Firebase
+          "https://servicio.infoexperto.com.ar"     // Si en algún momento llamás directo desde front
+        ],
+
+        // Estilos (permitimos inline porque estás usando CSS propio y quizá algún inline en el futuro)
+        styleSrc: [
+          "'self'",
+          "'unsafe-inline'"
+        ],
+
+        // Imágenes (incluye data: por si algo viene embebido)
+        imgSrc: ["'self'", "data:"],
+
+        // Fonts, si en algún momento usás externas
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+
+        // Objetos tipo <iframe>, <embed> (muy restrictivo)
+        objectSrc: ["'none'"]
+      }
+    }
+  })
+);
+
+
 app.use(express.json());
 
-// Servir estáticos
+// Servir estáticos (index.html, main.js, styles.css, login.html, etc.)
 const publicPath = path.join(__dirname, "public");
 app.use(express.static(publicPath));
+
+// Limitar la cantidad de consultas a InfoExperto por IP
+const infoexpertoLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minuto
+  max: 10, // máx 10 requests/minuto por IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error:
+      "Demasiadas consultas a InfoExperto desde esta IP. Intentá de nuevo más tarde.",
+  },
+});
+
+function validarEntradaInfoexperto(req, res, next) {
+  const { tipoDocumento, numero } = req.body || {};
+  const tipo = (tipoDocumento || "").toLowerCase();
+  const limpio = (numero || "").toString().replace(/\D/g, "");
+
+  if (!tipo || !numero) {
+    return res.status(400).json({
+      error: "Campos requeridos: tipoDocumento y numero",
+    });
+  }
+
+  if (tipo === "dni") {
+    if (limpio.length < 7 || limpio.length > 8) {
+      return res.status(400).json({
+        error: "Formato de DNI inválido. Debe tener 7 u 8 dígitos.",
+      });
+    }
+  } else if (tipo === "cuit" || tipo === "cuil") {
+    if (limpio.length !== 11) {
+      return res.status(400).json({
+        error: "Formato de CUIT/CUIL inválido. Debe tener 11 dígitos.",
+      });
+    }
+  } else {
+    return res.status(400).json({
+      error: "tipoDocumento debe ser 'dni' o 'cuit'",
+    });
+  }
+
+  // Guardamos el número limpio para que lo use la ruta
+  req.numeroLimpio = limpio;
+  req.tipoLower = tipo;
+
+  next();
+}
 
 /**
  * Inferimos el riesgo ALTO / MEDIO / BAJO a partir del scoring.
@@ -301,110 +392,94 @@ function evaluarRiesgoMedio(datos) {
   };
 }
 
-/**
- * Normaliza el número (quita puntos/guiones)
- */
-function limpiarNumero(num) {
-  return (num || "").toString().replace(/\D/g, "");
-}
-
 // Endpoint principal
-app.post("/api/infoexperto", authMiddleware, async (req, res) => {
-  try {
-    // 👇 YA NO LEEMOS 'sexo'
-    const { tipoDocumento, numero } = req.body || {};
+app.post(
+  "/api/infoexperto",
+  authMiddleware, // 1) Debe estar logueado (Firebase)
+  infoexpertoLimiter, // 2) Límite de requests por IP
+  validarEntradaInfoexperto, // 3) Validación de input
+  async (req, res) => {
+    try {
+      const tipoLower = req.tipoLower;
+      const numeroLimpio = req.numeroLimpio;
 
-    if (!tipoDocumento || !numero) {
-      return res.status(400).json({
-        error: "Campos requeridos: tipoDocumento y numero",
+      const apiKey = process.env.INFOEXPERTO_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({
+          error: "Falta INFOEXPERTO_API_KEY en el archivo .env",
+        });
+      }
+
+      const formData = new FormData();
+      formData.append("apiKey", apiKey);
+      formData.append("tipo", "normal");
+
+      let url = "";
+
+      if (tipoLower === "cuit" || tipoLower === "cuil") {
+        url =
+          "https://servicio.infoexperto.com.ar/api/informeApi/obtenerInforme";
+        formData.append("cuit", numeroLimpio);
+      } else if (tipoLower === "dni") {
+        url =
+          "https://servicio.infoexperto.com.ar/api/informeApi/obtenerInformeDni";
+        formData.append("dni", numeroLimpio);
+        // ya no mandamos sexo
+      }
+
+      const resp = await fetch(url, {
+        method: "POST",
+        body: formData,
+        redirect: "follow",
       });
-    }
 
-    const apiKey = process.env.INFOEXPERTO_API_KEY;
-    if (!apiKey) {
+      if (!resp.ok) {
+        const textoError = await resp.text();
+        console.error("Error desde InfoExperto:", textoError);
+        return res.status(resp.status).json({
+          error: "Error desde API InfoExperto",
+          detalle: textoError,
+        });
+      }
+
+      const apiJson = await resp.json();
+
+      const informe = apiJson?.data?.informe;
+      if (!informe) {
+        console.error("Respuesta sin data.informe:", apiJson);
+        return res.status(400).json({
+          error: apiJson.message || "No se pudo obtener el informe",
+          codigo: apiJson.metadata?.codigo ?? null,
+        });
+      }
+
+      const internos = mapearInfoexpertoADatosInternos(informe);
+      const riesgo = internos.riesgoApi;
+      const scoringApi = Number(informe?.scoringInforme?.scoring) || null;
+
+      let riesgoInterno = null;
+      if (riesgo === "MEDIO") {
+        riesgoInterno = evaluarRiesgoMedio(internos);
+      }
+
+      return res.json({
+        nombreCompleto: internos.nombreCompleto,
+        numero: numeroLimpio,
+        tipoDocumento: tipoLower,
+        riesgo,
+        scoringApi,
+        fechaInforme: apiJson?.data?.fecha || null,
+        riesgoInterno,
+        informeOriginal: informe,
+      });
+    } catch (err) {
+      console.error("Error en /api/infoexperto:", err);
       return res.status(500).json({
-        error: "Falta INFOEXPERTO_API_KEY en el archivo .env",
+        error: "Error interno del servidor",
       });
     }
-
-    const numeroLimpio = limpiarNumero(numero);
-    const tipoLower = tipoDocumento.toLowerCase();
-
-    const formData = new FormData();
-    formData.append("apiKey", apiKey);
-    formData.append("tipo", "normal");
-
-    let url = "";
-
-    if (tipoLower === "cuit" || tipoLower === "cuil") {
-      url =
-        "https://servicio.infoexperto.com.ar/api/informeApi/obtenerInforme";
-      formData.append("cuit", numeroLimpio);
-    } else if (tipoLower === "dni") {
-      url =
-        "https://servicio.infoexperto.com.ar/api/informeApi/obtenerInformeDni";
-      // 👇 SOLO MANDAMOS DNI, SIN SEXO
-      formData.append("dni", numeroLimpio);
-    } else {
-      return res.status(400).json({
-        error: "tipoDocumento debe ser 'cuit' o 'dni'",
-      });
-    }
-
-    const resp = await fetch(url, {
-      method: "POST",
-      body: formData,
-      redirect: "follow",
-    });
-
-    if (!resp.ok) {
-      const textoError = await resp.text();
-      console.error("Error desde InfoExperto:", textoError);
-      return res.status(resp.status).json({
-        error: "Error desde API InfoExperto",
-        detalle: textoError,
-      });
-    }
-
-    const apiJson = await resp.json();
-
-    // Si la API devuelve warning / sin informe, lo devolvemos al front
-    const informe = apiJson?.data?.informe;
-    if (!informe) {
-      console.error("Respuesta sin data.informe:", apiJson);
-      return res.status(400).json({
-        error: apiJson.message || "No se pudo obtener el informe",
-        codigo: apiJson.metadata?.codigo ?? null,
-      });
-    }
-
-    const internos = mapearInfoexpertoADatosInternos(informe);
-    const riesgo = internos.riesgoApi;
-    const scoringApi = Number(informe?.scoringInforme?.scoring) || null;
-
-    let riesgoInterno = null;
-    if (riesgo === "MEDIO") {
-      riesgoInterno = evaluarRiesgoMedio(internos);
-    }
-
-    return res.json({
-      nombreCompleto: internos.nombreCompleto,
-      numero: numeroLimpio,
-      tipoDocumento: tipoLower,
-      riesgo,
-      scoringApi,
-      fechaInforme: apiJson?.data?.fecha || null,
-      riesgoInterno,
-      informeOriginal: informe,
-    });
-  } catch (err) {
-    console.error("Error en /api/infoexperto:", err);
-    return res.status(500).json({
-      error: "Error interno del servidor",
-    });
   }
-});
-
+);
 
 app.listen(PORT, () => {
   console.log(`Servidor escuchando en http://localhost:${PORT}`);
