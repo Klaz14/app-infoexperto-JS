@@ -4,8 +4,7 @@ const path = require("path");
 const cors = require("cors");
 const dotenv = require("dotenv");
 
-// IMPORTANTE: en Node 18+ fetch y FormData son globales.
-// Vos estás en Node 25, así que no hace falta require extra.
+// Node 18+ tiene fetch / FormData global
 dotenv.config();
 
 const app = express();
@@ -17,17 +16,12 @@ const authMiddleware = require("./authMiddleware");
 app.use(cors());
 app.use(express.json());
 
-// Servir archivos estáticos desde /public
+// Servir estáticos
 const publicPath = path.join(__dirname, "public");
 app.use(express.static(publicPath));
 
 /**
- * Inferimos el riesgo ALTO / MEDIO / BAJO a partir del scoring de InfoExperto.
- *
- * Según lo que vimos en los informes:
- *  - scoring 1–2  => Riesgo ALTO
- *  - scoring 3–4  => Riesgo MEDIO
- *  - scoring 5    => Riesgo BAJO (EXCELENTE)
+ * Inferimos el riesgo ALTO / MEDIO / BAJO a partir del scoring.
  */
 function inferirRiesgoDesdeScoring(informe) {
   const scoringObj = informe?.scoringInforme;
@@ -42,19 +36,18 @@ function inferirRiesgoDesdeScoring(informe) {
     return "BAJO";
   }
 
-  // Fallback: si no tenemos scoring, lo dejamos en MEDIO para forzar revisión
+  // Sin scoring -> lo dejamos en MEDIO (forzar revisión)
   return "MEDIO";
 }
 
 /**
- * Calcula la peor situación BCRA de los últimos 24 meses
- * a partir de informe.bcra.resumen_historico
+ * Peor situación BCRA 24 meses (bcra.resumen_historico)
  */
 function obtenerPeorSituacionBcra24m(informe) {
   const resumen = informe?.bcra?.resumen_historico;
   if (!resumen || typeof resumen !== "object") return null;
 
-  let peor = null; // mayor número = peor situación
+  let peor = null;
   for (const key of Object.keys(resumen)) {
     const entry = resumen[key];
     const sit = Number(entry?.peor_situacion);
@@ -66,8 +59,7 @@ function obtenerPeorSituacionBcra24m(informe) {
 }
 
 /**
- * Convierte el JSON de InfoExperto (data.informe) en un formato interno
- * que usa nuestra función evaluarRiesgoMedio.
+ * Mapeo del JSON de InfoExperto a datos internos.
  */
 function mapearInfoexpertoADatosInternos(informe) {
   const identidad = informe?.identidad || {};
@@ -75,23 +67,21 @@ function mapearInfoexpertoADatosInternos(informe) {
   const condicionTributaria = informe?.condicionTributaria || {};
   const actividadScoring = scoring?.actividad || {};
 
-  // Nombre completo
   const nombreCompleto =
     identidad.nombre_completo ||
     informe?.soaAfipA4Online?.nombreCompleto ||
     condicionTributaria?.nombre ||
     "Sin nombre";
 
-  // Riesgo API (ALTO / MEDIO / BAJO) derivado del scoring
   const riesgoApi = inferirRiesgoDesdeScoring(informe);
 
-  // Ingreso mensual estimado desde monto_anual AFIP
+  // Ingreso mensual estimado AFIP
   let ingresoMensualEstimado = 0;
   if (typeof condicionTributaria.monto_anual === "number") {
     ingresoMensualEstimado = condicionTributaria.monto_anual / 12;
   }
 
-  // Capacidad y compromiso: usamos scoringInforme.credito/deuda como aproximación
+  // Capacidad / compromiso (aprox desde scoringInforme)
   let capacidadTotal = 0;
   let compromisoMensual = 0;
   const credito = scoring?.credito ? Number(scoring.credito) : NaN;
@@ -101,21 +91,18 @@ function mapearInfoexpertoADatosInternos(informe) {
     capacidadTotal = credito;
   }
   if (Number.isFinite(deuda) && deuda > 0) {
-    // Lo distribuimos en 12 meses como aproximación simple
     compromisoMensual = deuda / 12;
   }
 
-  // Antigüedad laboral desde anios_inscripcion (identidad)
+  // Antigüedad laboral (meses)
   let antiguedadLaboralMeses = 0;
   const aniosIns = Number(identidad?.anios_inscripcion);
   if (Number.isFinite(aniosIns) && aniosIns > 0) {
     antiguedadLaboralMeses = aniosIns * 12;
   }
 
-  // Peor situación BCRA últimos 24 meses
   const situacionBcraPeor24m = obtenerPeorSituacionBcra24m(informe);
 
-  // Actividad formal: empleado / monotributista / autónomo / empleador = "SI"
   let tieneActividadFormal = false;
   if (actividadScoring) {
     if (
@@ -128,7 +115,6 @@ function mapearInfoexpertoADatosInternos(informe) {
     }
   }
 
-  // Vehículos / inmuebles
   const tieneVehiculosRegistrados =
     Array.isArray(informe.rodados) && informe.rodados.length > 0;
 
@@ -150,13 +136,10 @@ function mapearInfoexpertoADatosInternos(informe) {
 }
 
 /**
- * Evalúa un caso de RIESGO MEDIO y devuelve:
- *  - estado: "APROBADO" | "REVISION" | "RECHAZADO"
- *  - scoreInterno: 0–100
- *  - motivos: array de strings
+ * Evaluación para RIESGO MEDIO
  */
 function evaluarRiesgoMedio(datos) {
-  let score = 50; // base para riesgo MEDIO
+  let score = 50;
   const motivos = [];
 
   const {
@@ -170,7 +153,7 @@ function evaluarRiesgoMedio(datos) {
     tieneInmueblesRegistrados,
   } = datos;
 
-  // 1) Historial BCRA
+  // 1) BCRA
   if (situacionBcraPeor24m != null) {
     if (situacionBcraPeor24m >= 3) {
       score -= 30;
@@ -188,7 +171,7 @@ function evaluarRiesgoMedio(datos) {
     motivos.push("Sin información clara de situación BCRA (neutro).");
   }
 
-  // 2) Actividad formal y antigüedad
+  // 2) Actividad y antigüedad
   if (!tieneActividadFormal) {
     score -= 30;
     motivos.push("No se detecta actividad formal registrable.");
@@ -204,7 +187,7 @@ function evaluarRiesgoMedio(datos) {
     }
   }
 
-  // 3) Relación compromiso/capacidad
+  // 3) Uso de capacidad
   let usoCapacidad = null;
   if (capacidadTotal > 0) {
     usoCapacidad = compromisoMensual / capacidadTotal;
@@ -246,15 +229,14 @@ function evaluarRiesgoMedio(datos) {
     motivos.push("Sin deudas registradas y sin capacidad informada (neutro).");
   }
 
-  // 4) Afectación sobre ingreso mensual (DTI)
+  // 4) DTI
+  let dti = null;
   if (ingresoMensualEstimado > 0) {
-    const dti = compromisoMensual / ingresoMensualEstimado;
+    dti = compromisoMensual / ingresoMensualEstimado;
     if (dti <= 0.3) {
       score += 15;
       motivos.push(
-        `Relación cuota/ingreso cómoda (${(dti * 100).toFixed(
-          1
-        )}% del ingreso).`
+        `Relación cuota/ingreso cómoda (${(dti * 100).toFixed(1)}% del ingreso).`
       );
     } else if (dti <= 0.4) {
       score += 5;
@@ -282,7 +264,7 @@ function evaluarRiesgoMedio(datos) {
     motivos.push("Sin información de ingresos estimados (neutro).");
   }
 
-  // 5) Activos registrables: vehículos / inmuebles
+  // 5) Activos
   if (tieneVehiculosRegistrados) {
     score += 5;
     motivos.push("Posee vehículos registrados a su nombre.");
@@ -291,54 +273,46 @@ function evaluarRiesgoMedio(datos) {
     score += 10;
     motivos.push("Posee inmuebles/domicilios registrados a su nombre.");
   }
-  if (!tieneVehiculosRegistrados && !tieneInmueblesRegistrados) {
-    motivos.push("No se detectan vehículos ni inmuebles registrados (neutro).");
-  }
 
-  // Normalizamos score 0–100
   if (score < 0) score = 0;
   if (score > 100) score = 100;
 
   let estado;
-  if (score >= 70) {
-    estado = "APROBADO";
-  } else if (score >= 55) {
-    estado = "REVISION"; // revisión manual / condiciones especiales
-  } else {
-    estado = "RECHAZADO";
-  }
+  if (score >= 70) estado = "APROBADO";
+  else if (score >= 55) estado = "REVISION";
+  else estado = "RECHAZADO";
 
   return {
     estado,
     scoreInterno: score,
     motivos,
+    metricas: {
+      capacidadTotal,
+      compromisoMensual,
+      ingresoMensualEstimado,
+      antiguedadMeses: antiguedadLaboralMeses,
+      situacionBcraPeor24m,
+      tieneActividadFormal,
+      tieneVehiculosRegistrados,
+      tieneInmueblesRegistrados,
+      usoCapacidad,
+      dti,
+    },
   };
 }
 
 /**
- * Endpoint principal: el front nos manda:
- *  - tipoDocumento: "cuit" | "dni"
- *  - numero: string (DNI o CUIT/CUIL)
- *  - sexo: "M" | "F" (solo si tipoDocumento = "dni", opcional en el front)
- *
- * Internamente replicamos los cURL oficiales:
- *
- * CUIT/CUIL:
- *   curl --location 'https://servicio.infoexperto.com.ar/api/informeApi/obtenerInforme' \
- *   --form 'apiKey="XXXXX-XXXXX-XXXXX-XXXXX"' \
- *   --form 'cuit="30123456789"' \
- *   --form 'tipo="normal"'
- *
- * DNI:
- *   curl --location 'https://servicio.infoexperto.com.ar/api/informeApi/obtenerInformeDni' \
- *   --form 'apiKey="XXXXX-XXXXX-XXXXX-XXXXX"' \
- *   --form 'dni="12345678"' \
- *   --form 'tipo="normal"' \
- *   --form 'sexo="M o F"'
+ * Normaliza el número (quita puntos/guiones)
  */
+function limpiarNumero(num) {
+  return (num || "").toString().replace(/\D/g, "");
+}
+
+// Endpoint principal
 app.post("/api/infoexperto", authMiddleware, async (req, res) => {
   try {
-    const { tipoDocumento, numero, sexo } = req.body || {};
+    // 👇 YA NO LEEMOS 'sexo'
+    const { tipoDocumento, numero } = req.body || {};
 
     if (!tipoDocumento || !numero) {
       return res.status(400).json({
@@ -353,37 +327,30 @@ app.post("/api/infoexperto", authMiddleware, async (req, res) => {
       });
     }
 
-    // Armamos FormData tal cual el cURL (multipart/form-data)
+    const numeroLimpio = limpiarNumero(numero);
+    const tipoLower = tipoDocumento.toLowerCase();
+
     const formData = new FormData();
     formData.append("apiKey", apiKey);
     formData.append("tipo", "normal");
 
     let url = "";
-    const tipoLower = tipoDocumento.toLowerCase();
 
     if (tipoLower === "cuit" || tipoLower === "cuil") {
       url =
         "https://servicio.infoexperto.com.ar/api/informeApi/obtenerInforme";
-      // cURL: --form 'cuit="30123456789"'
-      // Nosotros mandamos el número tal cual (sin comillas extra)
-      formData.append("cuit", numero);
+      formData.append("cuit", numeroLimpio);
     } else if (tipoLower === "dni") {
       url =
         "https://servicio.infoexperto.com.ar/api/informeApi/obtenerInformeDni";
-      formData.append("dni", numero);
-
-      // cURL: --form 'sexo="M o F"'
-      // Si el front no manda sexo, usamos "M" por defecto (como antes)
-      const sexoNormalizado =
-        sexo && (sexo === "M" || sexo === "F") ? sexo : "M";
-      formData.append("sexo", sexoNormalizado);
+      // 👇 SOLO MANDAMOS DNI, SIN SEXO
+      formData.append("dni", numeroLimpio);
     } else {
       return res.status(400).json({
         error: "tipoDocumento debe ser 'cuit' o 'dni'",
       });
     }
 
-    // Llamado HTTP equivalente al cURL
     const resp = await fetch(url, {
       method: "POST",
       body: formData,
@@ -401,36 +368,34 @@ app.post("/api/infoexperto", authMiddleware, async (req, res) => {
 
     const apiJson = await resp.json();
 
-    // Estructura esperada:
-    // {
-    //   status: "success",
-    //   message: "Informe pedido",
-    //   data: { id, fecha, informe: { ... } }
-    // }
+    // Si la API devuelve warning / sin informe, lo devolvemos al front
     const informe = apiJson?.data?.informe;
     if (!informe) {
       console.error("Respuesta sin data.informe:", apiJson);
-      return res.status(500).json({
-        error: "La respuesta de InfoExperto no contiene data.informe",
+      return res.status(400).json({
+        error: apiJson.message || "No se pudo obtener el informe",
+        codigo: apiJson.metadata?.codigo ?? null,
       });
     }
 
-    // Mapeo interno para nuestra lógica
     const internos = mapearInfoexpertoADatosInternos(informe);
     const riesgo = internos.riesgoApi;
+    const scoringApi = Number(informe?.scoringInforme?.scoring) || null;
 
     let riesgoInterno = null;
     if (riesgo === "MEDIO") {
       riesgoInterno = evaluarRiesgoMedio(internos);
     }
 
-    // Respuesta simplificada para el FRONT
     return res.json({
       nombreCompleto: internos.nombreCompleto,
-      numero,
-      tipoDocumento,
+      numero: numeroLimpio,
+      tipoDocumento: tipoLower,
       riesgo,
+      scoringApi,
+      fechaInforme: apiJson?.data?.fecha || null,
       riesgoInterno,
+      informeOriginal: informe,
     });
   } catch (err) {
     console.error("Error en /api/infoexperto:", err);
@@ -439,6 +404,7 @@ app.post("/api/infoexperto", authMiddleware, async (req, res) => {
     });
   }
 });
+
 
 app.listen(PORT, () => {
   console.log(`Servidor escuchando en http://localhost:${PORT}`);

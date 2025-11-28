@@ -137,30 +137,32 @@ button:not(:disabled):hover {
 }
 
 .riesgo-badge {
-  padding: 6px 10px;
+  padding: 6px 18px;
   border-radius: 999px;
   font-size: 0.85rem;
-  font-weight: 600;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  font-weight: 700;
+  border: none;
+  color: #ffffff;
+  background-color: #555555;
   opacity: 0.35;
 }
 
+/* Colores estilo InfoExperto */
 .riesgo-badge[data-riesgo="ALTO"] {
-  color: #ff5252;
+  background-color: #e00000; /* rojo */
 }
 
 .riesgo-badge[data-riesgo="MEDIO"] {
-  color: #ffeb3b;
+  background-color: #8d6e00; /* dorado/marrón */
 }
 
 .riesgo-badge[data-riesgo="BAJO"] {
-  color: #4caf50;
+  background-color: #4caf17; /* verde */
 }
 
 .riesgo-badge.activo {
   opacity: 1;
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 0 14px rgba(255, 255, 255, 0.25);
 }
 
 /* Detalle de motivos para riesgo medio */
@@ -235,20 +237,18 @@ pre {
   box-shadow: 0 4px 12px rgba(229, 57, 53, 0.6);
 }
 
-/* Wrapper para input de contraseña + botón ojo */
+/* Wrapper para input de contraseña + botón ojo (login) */
 .password-wrapper {
   position: relative;
   display: flex;
   align-items: center;
 }
 
-/* Input ocupa todo el ancho, el botón se superpone al borde derecho */
 .password-wrapper input {
   width: 100%;
-  padding-right: 40px; /* espacio para el botón ojo */
+  padding-right: 40px;
 }
 
-/* Botón ojo */
 .toggle-password-btn {
   position: absolute;
   right: 10px;
@@ -265,7 +265,7 @@ pre {
 }
 
 .toggle-password-btn:hover {
-  transform: translateY(0); /* para que no herede el hover de los otros botones */
+  transform: translateY(0);
   box-shadow: none;
   opacity: 0.9;
 }
